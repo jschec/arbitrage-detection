@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 from datetime import datetime
 import socket
-from typing import Dict, List, NamedTuple, Tuple
+from typing import Dict, List, NamedTuple
 
 from fxp_bytes_subscriber import (
     PublishedQuote,
@@ -19,6 +19,9 @@ SECONDS_PER_MINUTE = 60
 SUB_TIMEOUT = 10 * SECONDS_PER_MINUTE
 # Number of seconds before a published quote is considered 'stale'
 STALE_QUOTE_DEF = 1.5
+
+LISTENER_HOST = "localhost"
+LISTENER_PORT = 0
 
 
 class VertexData(NamedTuple):
@@ -72,9 +75,9 @@ class ForexSubscriber:
 
     def _send_address_to_publisher(self) -> None:
         """
-        TODO
+        Contacts the publisher to provide the listener address of this 
+        subscriber.
         """
-        # Create a UDP socket
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             msg = serialize_address(self._listener_host, self._listener_port)
             s.sendto(msg, self._publisher_address)
@@ -84,7 +87,7 @@ class ForexSubscriber:
         Start a socket bound to 'localhost' at a random port.
         """
         listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        listener.bind(('localhost', 0))  # use any free socket
+        listener.bind((LISTENER_HOST, LISTENER_PORT))
         listener.settimeout(SUB_TIMEOUT)
 
         self._listener_sock = listener
@@ -116,6 +119,8 @@ class ForexSubscriber:
         print()
 
     def _check_for_arbitrages(self):
+        self._graph = BellmandFord(self._published_quotes)
+        
         dist, prev, neg_edge = self._graph.shortest_paths()
 
         if neg_edge is not None:
@@ -141,6 +146,9 @@ class ForexSubscriber:
             self._graph.add_edge(curr1, curr2, timestamp, rate)
 
     def _subscribe(self) -> None:
+        """
+        TODO
+        """
         # subscriber binds the socket to the publishers address
         while True:
             data = self._listener_sock.recv(UDP_BUFFER_SIZE)
