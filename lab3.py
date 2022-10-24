@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
+from datetime import datetime
 import socket
-from typing import List, Tuple
+from typing import Dict, List, NamedTuple, Tuple
 
 from fxp_bytes_subscriber import (
     PublishedQuote,
@@ -16,8 +17,15 @@ UDP_BUFFER_SIZE = 4096
 SECONDS_PER_MINUTE = 60
 # Subscription timeout
 SUB_TIMEOUT = 10 * SECONDS_PER_MINUTE
-# 
-PUB_QUOTE_STALE_DEF = 1.5
+# Number of seconds before a published quote is considered 'stale'
+STALE_QUOTE_DEF = 1.5
+
+
+class VertexData(NamedTuple):
+    # Time, in which the quote was published
+    timestamp: datetime
+    # Exchange rate for the quote
+    exch_rate: float
 
 
 class ForexSubscriber:
@@ -37,11 +45,30 @@ class ForexSubscriber:
         self._listener_sock: socket.socket = None
         self._listener_host: str = None
         self._listener_port: int = None
+        self._published_quotes: Dict[str, Dict[str, VertexData]] = {}
         self._graph = BellmandFord()
 
         self._start_listener()
         self._send_address_to_publisher()
         self._subscribe()
+
+    def clean_stale_quotes(self, curr_time: datetime) -> None:
+        """
+        Removes stale published quotes from the encapsulated weighted graph.
+
+        Args:
+            curr_time (datetime): Current time stamp to compare against.
+        """
+        # Create a copy of the published quotes map for iterration 
+        ref_quotes = self._published_quotes
+
+        for curr1, nested_dict in ref_quotes.items():
+            for curr2, (timestamp, _) in nested_dict.items():
+                if (curr_time - timestamp).total_seconds() > STALE_QUOTE_DEF:
+                    print(f"removing stale quote for ('{curr1}', '{curr2}')")
+                    
+                    # Delete quote from published quotes map
+                    del self._published_quotes[curr1][curr2]
 
     def _send_address_to_publisher(self) -> None:
         """
