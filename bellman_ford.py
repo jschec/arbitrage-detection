@@ -1,75 +1,53 @@
 from datetime import datetime
-from typing import Dict, NamedTuple
+import math
+from typing import Dict
 
+from lab3 import VertexData
 
-class Graph:
-    # Constructor
-    def __init__(self, num_of_nodes, directed=True):
-        self.m_num_of_nodes = num_of_nodes
-        self.m_directed = directed
-
-        # Different representations of a graph
-        self.m_list_of_edges = []
-	
-    # Add edge to a graph
-    def add_edge(self, node1, node2, weight=1):        
-        # Add the edge from node1 to node2
-        self.m_list_of_edges.append([node1, node2, weight])
-
-        # If a graph is undirected, add the same edge,
-        # but also in the opposite direction
-        if not self.m_directed:
-            self.m_list_of_edges.append([node1, node2, weight])
-
-	# Print a graph representation
-    def print_edge_list(self):
-        num_of_edges = len(self.m_list_of_edges)
-        for i in range(num_of_edges):
-            print("edge ", i+1, ": ", self.m_list_of_edges[i])
-
-
-class VertexData(NamedTuple):
-    timestamp: datetime
-    exch_rate: float
-            
 
 class BellmandFord:
 
-    def __init__(self) -> None:
+    def __init__(
+        self, published_quotes: Dict[str, Dict[str, VertexData]]
+    ) -> None:
         """
         Constructor for the BellmandFord class.
         """
-        # Currencies mapped to TODO
-        self._graph: Dict[str, Dict[str, VertexData]] = {}
+        self._graph = self._construct_graph(published_quotes)
+
+    def _construct_graph(
+        self, published_quotes: Dict[str, Dict[str, VertexData]]
+    ) -> Dict[str, Dict[str, float]]:
+        graph = {}
+
+        for curr1, nested_dict in published_quotes.items():
+            for curr2, (_, exch_rate) in nested_dict.items():
+                graph[curr1][curr2] = -1 * math.log(exch_rate)
+                graph[curr2][curr1] = math.log(exch_rate)
+
+        return graph
 
     def add_edge(
-        self, currency1: str, currency2: str, exchage_rate: float
-    ) -> None:
-        pass
-
-    def clean_stale_quotes(
-        self, curr_time: datetime, stale_def: float
+        self, 
+        currency1: str, 
+        currency2: str, 
+        timestamp: datetime,
+        exchage_rate: float 
     ) -> None:
         """
-        Removes stale published quotes from the encapsulated weighted graph.
+        Adds or updates an existing edge to the encapsulated weighted graph.
 
         Args:
-            curr_time (datetime): Current time stamp to compare against.
-            stale_def (float): Time difference in seconds that defines a stale
-                published quote.
+            currency1 (str): TODO
+            currency2 (str): TODO
+            timestamp (datetime): Timestamp in which the quote was published. 
+            exchage_rate (float): The exchange rate for the quote.
         """
-        # Create a copy of the graph for iterration 
-        ref_graph = self._graph
+        self._graph[currency1][currency2] = VertexData(timestamp, exchage_rate)
 
-        for curr1, nested_dict in ref_graph.items():
-            for curr2, (timestamp, _) in nested_dict.items():
-                if (curr_time - timestamp).total_seconds() > stale_def:
-                    print(f"removing stale quote for ('{curr1}', '{curr2}')")
-                    
-                    # Delete node from source graph
-                    del self._graph[curr1][curr2]
-
-    def shortest_paths(self, start_vertex, tolerance=0):
+    def shortest_paths(
+        self, start_vertex: str, tolerance: int=0
+    ):
         """
         Find the shortest paths (sum of edge weights) from start_vertex to every other vertex.
         Also detect if there are negative cycles and report one of them.
@@ -100,3 +78,29 @@ class BellmandFord:
             predecessor:    dictionary keyed by vertex of previous vertex in shortest path from start_vertex
             negative_cycle: None if no negative cycle, otherwise an edge, (u,v), in one such cycle
         """
+        # Step 1: Prepare the distance and predecessor for each node
+        distance = {}
+        predecessor = {}
+
+        for curr1_node in self._graph:
+            distance[curr1_node] = float("inf") 
+            predecessor[curr1_node] = None
+        
+        distance[start_vertex] = 0
+
+        # Step 2: Relax the edges
+        for _ in range(len(self._graph) - 1):
+            for curr1_node in self._graph:
+                for curr2_node in self._graph[curr1_node]:
+                    
+                    # If the distance between the node and the neighbour is lower than the current, store it
+                    if distance[curr2_node] > distance[curr1_node] + curr1_node[curr1_node][curr2_node]:
+                        distance[curr2_node] = distance[curr1_node] + self._graph[curr1_node][curr2_node]
+                        predecessor[curr2_node] = curr1_node
+
+        # Step 3: Check for negative weight cycles
+        for curr1_node in self._graph:
+            for curr2_node in self._graph[curr1_node]:
+                assert distance[curr2_node] <= distance[curr1_node] + self._graph[curr1_node][curr2_node], "Negative weight cycle."
+    
+        return distance, predecessor
