@@ -1,11 +1,11 @@
 from array import array
 from datetime import datetime, timedelta
 import socket
-from typing import Any, List, NamedTuple
+from typing import Any, List, NamedTuple, Tuple
 
 
 MICROS_PER_SECOND = 1_000_000
-
+# Number of bytes in the published quote message
 MESSAGE_SIZE = 32
 
 
@@ -42,12 +42,11 @@ def deserialize_utcdatetime(message: bytes) -> datetime:
         message (bytes): Serialized message to extract UTC time stamp from.
 
     Returns:
-        datetime: TODO
+        datetime: Extracted UTC timestamp. 
     """
     epoch = datetime(1970, 1, 1)
     microsecs = int(deserialize_message('Q', message))
 
-    print(microsecs)
     seconds = microsecs / MICROS_PER_SECOND
     return epoch + timedelta(seconds=seconds)
 
@@ -68,18 +67,21 @@ def unmarshal_message(message: bytes) -> List[PublishedQuote]:
         curr_msg = message[idx:idx+MESSAGE_SIZE]
 
         timestamp = deserialize_utcdatetime(curr_msg[0:8])
-        curr1 = str(curr_msg[8:11])
-        curr2 = str(curr_msg[11:14])
+        curr1 = curr_msg[8:11].decode("utf-8")
+        curr2 = curr_msg[11:14].decode("utf-8")
+        print(deserialize_message('d', curr_msg[14:22]))
         rate = float(deserialize_message('d', curr_msg[14:22]))
 
         published_quotes.append(
             PublishedQuote(timestamp, curr1, curr2, rate)
         )
 
+        print(timestamp, curr1, curr2, rate)
+
     return published_quotes
 
 
-def serialize_address(host: str, port: int) -> bytes:
+def serialize_address(client_address: Tuple[str, int]) -> bytes:
     """
     Constructs a serialized message containing the listener address of the
     subscriber.
@@ -88,12 +90,13 @@ def serialize_address(host: str, port: int) -> bytes:
     b'\\x7f\\x00\\x00\\x01\\xff\\xfe'
 
     Args:
-        host (str): TODO
-        port (int): TODO
+        client_address (Tuple[str, int]): The host and port number of the 
+            client subscriber service.
 
     Returns:
         bytes: The resulting 6-byte serialized message.
     """
+    host, port = client_address
     host_bytes = socket.inet_aton(host)
 
     p = array('H', [port])
