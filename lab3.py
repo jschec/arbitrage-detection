@@ -1,4 +1,12 @@
+"""
+Module defining driver code for lab3.
+
+Authors: Joshua Scheck
+Version: 2022-11-22
+"""
+
 from argparse import ArgumentParser
+from copy import deepcopy
 from datetime import datetime
 import socket
 from typing import Dict, List, Tuple
@@ -16,7 +24,7 @@ UDP_BUFFER_SIZE = 4096
 # The number of seconds in a minute
 SECONDS_PER_MINUTE = 60
 # Subscription timeout
-SUB_TIMEOUT = 10 #* SECONDS_PER_MINUTE
+SUB_TIMEOUT = 10 * SECONDS_PER_MINUTE
 # Number of seconds before a published quote is considered 'stale'
 STALE_QUOTE_DEF = 1.5
 # Host of subscriber service
@@ -44,12 +52,13 @@ class ForexSubscriber:
         self._listener_sock: socket.socket = None
         self._listener_addr: Tuple[str, int] = None
         self._published_quotes: Dict[str, Dict[str, QuoteData]] = {}
+        self._latest_timestamp: datetime = None
 
         self._start_listener()
         self._send_address_to_publisher()
         self._subscribe()
 
-    def clean_stale_quotes(self, curr_time: datetime) -> None:
+    def _clean_stale_quotes(self, curr_time: datetime) -> None:
         """
         Removes stale published quotes from the encapsulated weighted graph.
 
@@ -57,7 +66,7 @@ class ForexSubscriber:
             curr_time (datetime): Current time stamp to compare against.
         """
         # Create a copy of the published quotes map for iterration 
-        ref_quotes = self._published_quotes
+        ref_quotes = deepcopy(self._published_quotes)
 
         for curr1, nested_dict in ref_quotes.items():
             for curr2, (timestamp, _) in nested_dict.items():
@@ -88,9 +97,21 @@ class ForexSubscriber:
         self._listener_sock = listener
         self._listener_addr = listener.getsockname()
 
-    # TODO
-    def _get_exchange_rate(self, currency: str) -> float:
-        return self._published_quotes[currency]
+    def _get_exchange_rate(self, src_curr: str, dest_curr: str) -> float:
+        """
+        Retrieves the exchange rate for the pair of currencies
+
+        Args:
+            src_curr (str): The source currency to start from.
+            dest_curr (str): The destination currency to trade into.
+
+        Returns:
+            float: The currency exchange rate.
+        """
+        try:
+            return self._published_quotes[src_curr][dest_curr].exch_rate
+        except Exception:
+            return self._published_quotes[dest_curr][src_curr].exch_rate
 
     def _report_arbitrage(self, negative_cycle: List[str]) -> None:
         """
@@ -104,10 +125,10 @@ class ForexSubscriber:
         print("ARBITRAGE:")
         print(f"\tstart with {init_currency} {curr_value}")
 
-        for idx in range(len(negative_cycle)):
+        for idx in range(len(negative_cycle) - 1):
             curr_currency = negative_cycle[idx]
 
-            if idx == len(negative_cycle - 1):
+            if idx == len(negative_cycle) - 1:
                 next_currency = init_currency
             else:
                 next_currency = negative_cycle[idx+1]
@@ -148,14 +169,18 @@ class ForexSubscriber:
             published_quotes (List[PublishedQuote]): Extracted quotes retrieved
                 from forex publisher.
         """
-        latest = published_quotes[0].timestamp
+        if self._latest_timestamp is None:
+            self._latest_timestamp = published_quotes[0].timestamp
 
         for timestamp, curr1, curr2, rate in published_quotes:
 
             # Ignore quotes that have a time stamp smaller than latest
-            if latest > timestamp:
+            if self._latest_timestamp > timestamp:
                 print("ignoring out-of-sequence message")
                 continue
+            
+            # Update encapsulated timestamp
+            self._latest_timestamp = timestamp
             
             # Create nested dictionary if none exists
             if curr1 not in self._published_quotes:
@@ -176,6 +201,8 @@ class ForexSubscriber:
 
                 self._update_graph(published_quotes)
                 self._check_for_arbitrages()
+
+                self._clean_stale_quotes(self._latest_timestamp)
         
         finally:
             self._listener_sock.close()
