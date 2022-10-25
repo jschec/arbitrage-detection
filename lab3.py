@@ -68,13 +68,16 @@ class ForexSubscriber:
         # Create a copy of the published quotes map for iterration 
         ref_quotes = deepcopy(self._published_quotes)
 
-        for curr1, nested_dict in ref_quotes.items():
-            for curr2, (timestamp, _) in nested_dict.items():
+        for src_curr, nested_dict in ref_quotes.items():
+            for dest_curr, (timestamp, _) in nested_dict.items():
                 if (curr_time - timestamp).total_seconds() > STALE_QUOTE_DEF:
-                    print(f"removing stale quote for ('{curr1}', '{curr2}')")
-                    
+                    print(
+                        f"removing stale quote for ('{src_curr}', "
+                        f"'{dest_curr}')"
+                    )
+
                     # Delete quote from published quotes map
-                    del self._published_quotes[curr1][curr2]
+                    del self._published_quotes[src_curr][dest_curr]
 
     def _send_address_to_publisher(self) -> None:
         """
@@ -174,7 +177,7 @@ class ForexSubscriber:
         if self._latest_timestamp is None:
             self._latest_timestamp = published_quotes[0].timestamp
 
-        for timestamp, curr1, curr2, rate in published_quotes:
+        for timestamp, src_curr, dest_curr, rate in published_quotes:
 
             # Ignore quotes that have a time stamp smaller than latest
             if self._latest_timestamp > timestamp:
@@ -185,10 +188,12 @@ class ForexSubscriber:
             self._latest_timestamp = timestamp
             
             # Create nested dictionary if none exists
-            if curr1 not in self._published_quotes:
-                self._published_quotes[curr1] = {}
+            if src_curr not in self._published_quotes:
+                self._published_quotes[src_curr] = {}
 
-            self._published_quotes[curr1][curr2] = QuoteData(timestamp, rate)
+            self._published_quotes[src_curr][dest_curr] = QuoteData(
+                timestamp, rate
+            )
 
     def _subscribe(self) -> None:
         """
@@ -213,10 +218,10 @@ class ForexSubscriber:
 
 if __name__ == "__main__":
     """
-    Entry point of fxp_bytes_subscriber.py
+    Entry point of lab3.py
 
     To display instructions for the CLI, execute the following:
-    python3 fxp_bytes_subscriber.py --help
+    python3 lab3.py --help
 
     To run the program, execute the following:
     python3 lab3.py $FXP_HOST $FXP_PORT
