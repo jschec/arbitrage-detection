@@ -10,6 +10,7 @@ import socket
 import struct
 from typing import Any, List, NamedTuple, Tuple
 
+
 # Number of micros per second
 MICROS_PER_SECOND = 1_000_000
 # Number of bytes in the published quote message
