@@ -1,6 +1,7 @@
 from array import array
 from datetime import datetime, timedelta
 import socket
+import struct
 from typing import Any, List, NamedTuple, Tuple
 
 
@@ -69,8 +70,7 @@ def unmarshal_message(message: bytes) -> List[PublishedQuote]:
         timestamp = deserialize_utcdatetime(curr_msg[0:8])
         curr1 = curr_msg[8:11].decode("utf-8")
         curr2 = curr_msg[11:14].decode("utf-8")
-        print(deserialize_message('d', curr_msg[14:22]))
-        rate = float(deserialize_message('d', curr_msg[14:22]))
+        rate = float(struct.unpack('d', curr_msg[14:22])[0])
 
         published_quotes.append(
             PublishedQuote(timestamp, curr1, curr2, rate)
