@@ -1,19 +1,29 @@
+"""
+Module defining helper functions for forex subscriber.
+
+Authors: Joshua Scheck
+Version: 2022-11-22
+"""
 from array import array
 from datetime import datetime, timedelta
 import socket
 import struct
 from typing import Any, List, NamedTuple, Tuple
 
-
+# Number of micros per second
 MICROS_PER_SECOND = 1_000_000
 # Number of bytes in the published quote message
 MESSAGE_SIZE = 32
 
 
 class PublishedQuote(NamedTuple):
+    # Timestamp of when currency quote was published
     timestamp: datetime
-    currency1: str
-    currency2: str
+    # Starting currency to trade from
+    src_currency: str
+    # Destination currency to trade into
+    dest_currency: str
+    # Exchange rate of the published quote
     exch_rate: float
 
 
