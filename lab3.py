@@ -4,7 +4,6 @@ Module defining driver code for lab3.
 Authors: Joshua Scheck
 Version: 2022-11-22
 """
-
 from argparse import ArgumentParser
 from copy import deepcopy
 from datetime import datetime
@@ -37,7 +36,8 @@ DEFAULT_START_CURR_VAL = 100
 
 class ForexSubscriber:
     """
-    TODO
+    Subscribes to Forex currency quote publisher and identifies arbitrage
+    opportunities when available.
     """
 
     def __init__(self, host: str, port: int) -> None:
@@ -161,9 +161,11 @@ class ForexSubscriber:
 
             self._graph.reset()
 
-    def _update_graph(self, published_quotes: List[PublishedQuote]) -> None:
+    def _update_published_quotes(
+        self, published_quotes: List[PublishedQuote]
+    ) -> None:
         """
-        Update encapsulated weighted graph of published quotes.
+        Update encapsulated published quotes.
 
         Args:
             published_quotes (List[PublishedQuote]): Extracted quotes retrieved
@@ -199,12 +201,13 @@ class ForexSubscriber:
 
                 published_quotes = unmarshal_message(data)
 
-                self._update_graph(published_quotes)
+                self._update_published_quotes(published_quotes)
                 self._check_for_arbitrages()
 
                 self._clean_stale_quotes(self._latest_timestamp)
         
         finally:
+            # Close listener socket at the end of subscription
             self._listener_sock.close()
 
 
