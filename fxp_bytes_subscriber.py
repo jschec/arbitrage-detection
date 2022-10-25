@@ -86,8 +86,6 @@ def unmarshal_message(message: bytes) -> List[PublishedQuote]:
             PublishedQuote(timestamp, curr1, curr2, rate)
         )
 
-        print(timestamp, curr1, curr2, rate)
-
     return published_quotes
 
 
