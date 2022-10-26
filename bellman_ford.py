@@ -9,6 +9,10 @@ import math
 from typing import Dict, List, NamedTuple
 
 
+# Constant representing infinity
+INF = float("Inf")
+
+
 class QuoteData(NamedTuple):
     # Time, in which the quote was published
     timestamp: datetime
@@ -32,6 +36,8 @@ class BellmandFord:
         self._graph = self._construct_graph(published_quotes)
         self._distance = {}
         self._predecessor = {}
+        self._tolerance = None
+        self._latest_relaxed_vertex = None
 
     def _construct_graph(
         self, published_quotes: Dict[str, Dict[str, QuoteData]]
@@ -65,8 +71,62 @@ class BellmandFord:
 
         return graph
 
+    def _distance_improved(self, curr1: str, curr2: str) -> bool:
+        """
+        Determines if collective distance is improved and is greater than the
+        specified threshold.
+
+        Args:
+            curr1 (str): First currency vertex.
+            curr2 (str): Second currency vertex
+
+        Returns:
+            bool: True if distance improved and is greater than the specified 
+                threshold, otherwise False.
+        """
+        # Calculate potential distance improvment
+        relaxation = self._distance[curr1]\
+            + self._graph[curr1][curr2]
+        
+        prev_distance = self._distance[curr2]
+        new_distance = relaxation
+
+        # Only relax when collective distance is improved and is
+        # greater than specified tolerance
+        if (prev_distance - new_distance) > self._tolerance:
+            self._distance[curr2] = self._distance[curr1] +\
+                self._graph[curr1][curr2]
+            self._predecessor[curr2] = curr1
+            return True
+
+        return False
+
+    def _should_relax(self, curr1: str, curr2: str) -> bool:
+        """
+        Determines if the vertex pair should be relaxed.
+
+        Relaxation may occur if:
+        1) Distance of curr2 is infinite and curr1 is not infinite. This should
+        indicate that curr2 > curr1.
+        2) Collective distance is improved and is greater than specified 
+        tolerance.
+
+        Args:
+            curr1 (str): First currency vertex.
+            curr2 (str): Second currency vertex
+
+        Returns:
+            bool: True if the vertex pair should be relaxed.
+        """
+        # Indicates that self._distance[curr2] has not been set
+        if self._distance[curr1] != INF and\
+            self._distance[curr2] == INF:
+            return True
+        
+        return self._distance_improved(curr1, curr2)
+
     def _initialize_vertex_data(
-        self, start_vertex: str, tolerance: int
+        self, start_vertex: str
     ) -> None:
         """
         Initializes the encapsulated distance and predecessor dictionaries.
@@ -74,14 +134,12 @@ class BellmandFord:
         Args:
             start_vertex (str): Vertex to derrive shortest paths from every 
                 other vertex for.
-            tolerance (int): Threshold to apply to path weights. Paths with 
-                weights larger than tolerance will be relaxed.
         """
         for curr1 in self._graph:
-            self._distance[curr1] = float("Inf") 
+            self._distance[curr1] = INF 
             self._predecessor[curr1] = None
         
-        self._distance[start_vertex] = tolerance
+        self._distance[start_vertex] = 0
 
     def _relax_edges(self) -> None:
         """
@@ -93,64 +151,70 @@ class BellmandFord:
         for _ in range(len(self._graph) - 1):
             for curr1 in self._graph:
                 for curr2 in self._graph[curr1]:
-                    
-                    # TODO
-                    # If the distance between the node and the neighbour is lower than the current, store it
-                    if self._distance[curr1] != float("Inf") and\
-                        self._distance[curr2] > self._distance[curr1] +\
-                        self._graph[curr1][curr2]:
-                        
+                    if self._should_relax(curr1, curr2):
                         self._distance[curr2] = self._distance[curr1] +\
                             self._graph[curr1][curr2]
                         self._predecessor[curr2] = curr1
-
+                        
     def _identify_neg_cycle(self, start_vertex: str) -> List[str]:
         """
         Identifies the start of a negative cycle.
 
         Returns:
-            List[str]: The identified negative cycle.
+            List[str]: The identified negative cycle, where the first and last
+                element have the same value.
         """
-        neg_cycle = [start_vertex]
+        for _ in range(len(self._graph.keys())):
+            start_vertex = self._predecessor[start_vertex]
+
+        neg_cycle = []
         next_curr = start_vertex
+        weight_sum = 0
 
         while True:
-            print(self._predecessor)
-            print(f"_identify_neg_cycle {start_vertex}")
+            neg_cycle.append(next_curr)
+
+            if next_curr == start_vertex and len(neg_cycle) > 1:
+                break
+
             next_curr = self._predecessor[next_curr]
 
-            if next_curr not in neg_cycle:
-                neg_cycle.append(next_curr)
-            else:
-                neg_cycle.append(next_curr)
-                neg_cycle = neg_cycle[neg_cycle.index(next_curr):]
-                return neg_cycle
+        # Reverse negative cycle
+        neg_cycle.reverse()
 
-    def get_negative_cycle(self, start_vertex: str) -> List[str]:
+        for idx in range(len(neg_cycle) - 1):
+            curr = neg_cycle[idx]
+            next_curr = neg_cycle[idx+1]
+            weight_sum += self._graph[curr][next_curr]
+
+        # Ensure that weighted sum is negative
+        if weight_sum <= (-1 * self._tolerance):
+            return neg_cycle
+
+        return []
+
+    def get_negative_cycle(self) -> List[str]:
         """
         Retrieves the negative cycle in the encapsulated weighted graph.
 
         If the sum of weights is greater than -tolerance, it is not reported 
         as a negative cycle.
 
-        Args:
-            start_vertex (str): Vertex to derrive shortest paths from every 
-                other vertex for.
-
         Returns:
             List[str]: Identified negative cycle, otherwise an empty list.
         """
         for curr1 in self._graph:
             for curr2 in self._graph[curr1]:
-                if self._distance[curr1] != float("Inf") and\
-                    self._distance[curr2] > self._distance[curr1]\
-                    + self._graph[curr1][curr2]:
-                    
-                    return self._identify_neg_cycle(start_vertex)
-
+                if self._distance[curr1] != INF and\
+                    self._distance[curr2] < self._distance[curr1]\
+                   + self._graph[curr1][curr2]:
+                    try:
+                        return self._identify_neg_cycle(curr2)
+                    except KeyError:
+                        pass
         return []
 
-    def shortest_paths(self, start_vertex: str, tolerance: int=0) -> None:
+    def shortest_paths(self, start_vertex: str, tolerance: float=1e-8) -> None:
         """
         Determines the shortest paths (sum of edge weights) from the specified
         vertex to every other vertex. 
@@ -158,10 +222,12 @@ class BellmandFord:
         Args:
             start_vertex (str): Vertex to derrive shortest paths from every 
                 other vertex for.
-            tolerance (int): Threshold to apply to path weights. Paths with 
-                weights larger than tolerance will be relaxed.
+            tolerance (int): Thresholding value, which ensures that path 
+                improvements must be greater than this value in order to be
+                relaxed.
         """
-        self._initialize_vertex_data(start_vertex, tolerance)
+        self._tolerance = tolerance
+        self._initialize_vertex_data(start_vertex)
         self._relax_edges()
 
     def reset(self) -> None:
@@ -171,3 +237,4 @@ class BellmandFord:
         """
         self._distance = {}
         self._predecessor = {}
+        self._tolerance = None

@@ -111,10 +111,7 @@ class ForexSubscriber:
         Returns:
             float: The currency exchange rate.
         """
-        try:
-            return self._published_quotes[src_curr][dest_curr].exch_rate
-        except Exception:
-            return self._published_quotes[dest_curr][src_curr].exch_rate
+        return self._published_quotes[src_curr][dest_curr].exch_rate
 
     def _report_arbitrage(self, negative_cycle: List[str]) -> None:
         """
@@ -155,7 +152,7 @@ class ForexSubscriber:
         
         for currency in self._published_quotes.keys():
             self._graph.shortest_paths(currency)
-            neg_cycle = self._graph.get_negative_cycle(currency)
+            neg_cycle = self._graph.get_negative_cycle()
 
             # Escape out for first arbitrage opportunity found.
             if len(neg_cycle) > 0:
@@ -178,6 +175,7 @@ class ForexSubscriber:
             self._latest_timestamp = published_quotes[0].timestamp
 
         for timestamp, src_curr, dest_curr, rate in published_quotes:
+            print(timestamp, src_curr, dest_curr, rate)
 
             # Ignore quotes that have a time stamp smaller than latest
             if self._latest_timestamp > timestamp:
@@ -191,26 +189,34 @@ class ForexSubscriber:
             if src_curr not in self._published_quotes:
                 self._published_quotes[src_curr] = {}
 
+            if dest_curr not in self._published_quotes:
+                self._published_quotes[dest_curr] = {}
+
             self._published_quotes[src_curr][dest_curr] = QuoteData(
                 timestamp, rate
+            )
+            self._published_quotes[dest_curr][src_curr] = QuoteData(
+                timestamp, 1/rate
             )
 
     def _subscribe(self) -> None:
         """
         Subscribes to publisher forex quote feed.
         """
-        # subscriber binds the socket to the publishers address
+        # Subscriber waits for messages from publisher
         try:
             while True:
                 data = self._listener_sock.recv(UDP_BUFFER_SIZE)
 
                 published_quotes = unmarshal_message(data)
 
+                self._clean_stale_quotes(self._latest_timestamp)
                 self._update_published_quotes(published_quotes)
                 self._check_for_arbitrages()
-
-                self._clean_stale_quotes(self._latest_timestamp)
         
+        except socket.timeout:
+            print(f"Subscription timed out")
+
         finally:
             # Close listener socket at the end of subscription
             self._listener_sock.close()
